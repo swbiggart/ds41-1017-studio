@@ -1,0 +1,262 @@
+{
+  "timestamp_utc": "2026-11-23T13:15:06.049596+00:00",
+  "binary": ".local/tensorfold-v133/zig-out/bin/tensorfold-dsv41",
+  "binary_sha256": "da349690bf1e96c72d7e750fe514cb19b1ce8714340a84670a622eef858f65ae",
+  "max_tokens": 128,
+  "levels": {
+    "1": {
+      "parallel": 1,
+      "wall_s": 0.7336,
+      "wall_tps": 103.6,
+      "window_tps": 123.51,
+      "median_client_decode_tps": 123.66,
+      "median_client_ttft_s": 0.1264,
+      "max_client_ttft_s": 0.1264,
+      "requests": [
+        {
+          "name": "quicksort-raw",
+          "prompt_tokens": 17,
+          "completion_tokens": 76,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.12637125,
+          "decode_s": 0.606525084,
+          "decode_tps": 123.6552320398343,
+          "wall_s": 0.7335,
+          "finish_reason": "stop",
+          "token_sha256": "6c87576911bb02fa7bccf323c333180b491ec980e1d7346037741ba420ec625e",
+          "slot_idx": 0
+        }
+      ]
+    },
+    "2": {
+      "parallel": 2,
+      "wall_s": 2.1226,
+      "wall_tps": 96.11,
+      "window_tps": 101.19,
+      "median_client_decode_tps": 66.55,
+      "median_client_ttft_s": 0.1973,
+      "max_client_ttft_s": 0.2684,
+      "requests": [
+        {
+          "name": "quicksort-raw",
+          "prompt_tokens": 17,
+          "completion_tokens": 76,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.126165542,
+          "decode_s": 1.161426417,
+          "decode_tps": 64.57576554331122,
+          "wall_s": 1.2882,
+          "finish_reason": "stop",
+          "token_sha256": "6c87576911bb02fa7bccf323c333180b491ec980e1d7346037741ba420ec625e",
+          "slot_idx": 0
+        },
+        {
+          "name": "rust-reverse-words",
+          "prompt_tokens": 21,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.268381958,
+          "decode_s": 1.85341875,
+          "decode_tps": 68.52202180430083,
+          "wall_s": 2.1225,
+          "finish_reason": "length",
+          "token_sha256": "7ba0fe22cf5000183552b76fcd42f02f988da5b99c499d06ef9c2d9cdde44a7e",
+          "slot_idx": 1
+        }
+      ]
+    },
+    "4": {
+      "parallel": 4,
+      "wall_s": 4.8429,
+      "wall_tps": 94.99,
+      "window_tps": 96.74,
+      "median_client_decode_tps": 28.07,
+      "median_client_ttft_s": 0.3144,
+      "max_client_ttft_s": 0.5139,
+      "requests": [
+        {
+          "name": "quicksort-raw",
+          "prompt_tokens": 17,
+          "completion_tokens": 76,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.128811166,
+          "decode_s": 3.122194583,
+          "decode_tps": 24.02156496214765,
+          "wall_s": 3.2537,
+          "finish_reason": "stop",
+          "token_sha256": "6c87576911bb02fa7bccf323c333180b491ec980e1d7346037741ba420ec625e",
+          "slot_idx": 0
+        },
+        {
+          "name": "rust-reverse-words",
+          "prompt_tokens": 21,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.513925042,
+          "decode_s": 4.326840292,
+          "decode_tps": 29.35167268244529,
+          "wall_s": 4.8424,
+          "finish_reason": "length",
+          "token_sha256": "7ba0fe22cf5000183552b76fcd42f02f988da5b99c499d06ef9c2d9cdde44a7e",
+          "slot_idx": 1
+        },
+        {
+          "name": "multiply-17-23",
+          "prompt_tokens": 16,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.25696475,
+          "decode_s": 4.582568875,
+          "decode_tps": 27.713713304527257,
+          "wall_s": 4.8418,
+          "finish_reason": "length",
+          "token_sha256": "ff44781dae0ac4cfe5a6c1a03be3059a47c5a0e8bf4cf53d3aff4b8b10c7c21a",
+          "slot_idx": 2
+        },
+        {
+          "name": "sleep-tips",
+          "prompt_tokens": 12,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.371827917,
+          "decode_s": 4.468111042,
+          "decode_tps": 28.42364453483965,
+          "wall_s": 4.8425,
+          "finish_reason": "length",
+          "token_sha256": "a7dcfd8917af9485e012cd02836098e58f5f3d4c7ab73d206f8d80d75d4b5f37",
+          "slot_idx": 3
+        }
+      ]
+    },
+    "8": {
+      "parallel": 8,
+      "wall_s": 8.1734,
+      "wall_tps": 114.03,
+      "window_tps": 114.86,
+      "median_client_decode_tps": 16.75,
+      "median_client_ttft_s": 0.5896,
+      "max_client_ttft_s": 1.0768,
+      "requests": [
+        {
+          "name": "quicksort-raw",
+          "prompt_tokens": 17,
+          "completion_tokens": 76,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.128280291,
+          "decode_s": 5.486903958,
+          "decode_tps": 13.668910659653285,
+          "wall_s": 5.6168,
+          "finish_reason": "stop",
+          "token_sha256": "6c87576911bb02fa7bccf323c333180b491ec980e1d7346037741ba420ec625e",
+          "slot_idx": 0
+        },
+        {
+          "name": "rust-reverse-words",
+          "prompt_tokens": 21,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.532898958,
+          "decode_s": 7.637980459,
+          "decode_tps": 16.627431908437668,
+          "wall_s": 8.1724,
+          "finish_reason": "length",
+          "token_sha256": "7ba0fe22cf5000183552b76fcd42f02f988da5b99c499d06ef9c2d9cdde44a7e",
+          "slot_idx": 1
+        },
+        {
+          "name": "multiply-17-23",
+          "prompt_tokens": 16,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.393520916,
+          "decode_s": 7.777196541,
+          "decode_tps": 16.329791761141504,
+          "wall_s": 8.1721,
+          "finish_reason": "length",
+          "token_sha256": "ff44781dae0ac4cfe5a6c1a03be3059a47c5a0e8bf4cf53d3aff4b8b10c7c21a",
+          "slot_idx": 2
+        },
+        {
+          "name": "sleep-tips",
+          "prompt_tokens": 12,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.646222166,
+          "decode_s": 7.524542417,
+          "decode_tps": 16.87810274191189,
+          "wall_s": 8.172,
+          "finish_reason": "length",
+          "token_sha256": "a7dcfd8917af9485e012cd02836098e58f5f3d4c7ab73d206f8d80d75d4b5f37",
+          "slot_idx": 3
+        },
+        {
+          "name": "js-debounce-raw",
+          "prompt_tokens": 20,
+          "completion_tokens": 88,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.26990375,
+          "decode_s": 5.994514667,
+          "decode_tps": 14.51326835163785,
+          "wall_s": 6.2657,
+          "finish_reason": "stop",
+          "token_sha256": "99c388d0f1a3871bbae00c1e35161ad1fed674f374e9122d6c8a405cb5dd2493",
+          "slot_idx": 4
+        },
+        {
+          "name": "linear-equation",
+          "prompt_tokens": 38,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 1.076788875,
+          "decode_s": 7.09413475,
+          "decode_tps": 17.902112727700864,
+          "wall_s": 8.1723,
+          "finish_reason": "length",
+          "token_sha256": "4383e91536e24a010683a85e5f67f0ba46de34bfae4b6df409096a7080c4554b",
+          "slot_idx": 5
+        },
+        {
+          "name": "fishing-village",
+          "prompt_tokens": 14,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.906229833,
+          "decode_s": 7.264526,
+          "decode_tps": 17.48221425596109,
+          "wall_s": 8.1723,
+          "finish_reason": "length",
+          "token_sha256": "e2befbb31c0423e7ec267ea3b266a16bbe45fbcfedcb1c3555a9a161d98bfa6d",
+          "slot_idx": 6
+        },
+        {
+          "name": "sql-left-join",
+          "prompt_tokens": 24,
+          "completion_tokens": 128,
+          "cached_tokens": 0,
+          "drafts": true,
+          "ttft_s": 0.790205166,
+          "decode_s": 7.380584292,
+          "decode_tps": 17.2073097434384,
+          "wall_s": 8.1733,
+          "finish_reason": "length",
+          "token_sha256": "e88e4a90f65e698c9c0aa41803fda986ae0e45a4844c48e55c91602e8469982c",
+          "slot_idx": 7
+        }
+      ]
+    }
+  }
+}
