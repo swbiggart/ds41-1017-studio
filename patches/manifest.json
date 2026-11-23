@@ -1,0 +1,18 @@
+{
+  "upstream_repo": "https://github.com/ashhart/TensorFold.git",
+  "upstream_tag": "v1.3.3",
+  "upstream_commit": "1e4a32cb5e80f2908e4642f9e7ffe71ae63792cc",
+  "source_tree": "e33568e35e2fa4617daec30798414a4f3c3f9be1",
+  "patches": [
+    {
+      "file": "01-m5-metal-dspark-stack.patch",
+      "sha256": "6eb6d078e668d7405cf0c19aa7642630c0d6d2f921c1d6822611731963a9d13c",
+      "description": "Backport of the verified 7-PR Apple M5 Ultra Metal 4.1 stack (TF_DSV41_FP64_BF16=1) onto TensorFold v1.3.3 with 0 modified upstream .metal files: M5 NAX dense FP8 + tensor-unit MXFP4 prefill, fast DSpark NAX/MXFP4 projections, concurrent batched DSpark ingest + GPU blit undo + fused gate_plan_dspark, bidirectional DSpark block attention, top-K single-TG GPU Markov chain (TF_DSV41_MARKOV_TOPK), unified GPU filtered/multi-slot behind-the-verify picks, automatic pure-nucleus speculation, and confidence-guided adaptive block width."
+    },
+    {
+      "file": "02-m5-fast-decode-mode.patch",
+      "sha256": "1092dea3bebb7b8e8a2f408558440b0848fcf4987c9e5fbd699a264a03746624",
+      "description": "Add TF_DSV41_M5_FAST_DECODE=1 hybrid serve mode under TF_DSV41_FP64_BF16=1: combines M5 Ultra NAX FP8 + tensor-unit MXFP4 prompt prefill and the full PR 3-7 DSpark drafting stack with stock v1.3.3 FP32 hardware-MMA target decode/verify (fp8_rows, fp8_tile, experts, engram) for maximum end-to-end throughput."
+    }
+  ]
+}

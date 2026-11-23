@@ -1,0 +1,338 @@
+diff --git a/zig/kernels/metal/deepseek_v41/experts_fast_cert.metal b/zig/kernels/metal/deepseek_v41/experts_fast_cert.metal
+index 9b620d9..9bebd66 100644
+--- a/zig/kernels/metal/deepseek_v41/experts_fast_cert.metal
++++ b/zig/kernels/metal/deepseek_v41/experts_fast_cert.metal
+@@ -1,5 +1,5 @@
+ // Fast non-dd MXFP4 routed expert kernels for DSpark drafting under TF_DSV41_FP64_BF16=1.
+-inline float k3_scaled_fma(float p, uchar e, float acc) {
++inline float ds_fast_scaled_fma(float p, uchar e, float acc) {
+   if (e == 255u) return NAN;
+   if (e - 1u < 240u) return fma(p, k3_e8m0(e), acc);
+   const int d = int(e) - 127, d1 = d / 2;
+@@ -76,7 +76,7 @@ inline void ds_up_out_fast(thread float (&acc)[2][RP], threadgroup float (&vals)
+       }
+     }
+     const float xsc = xs[g];
+-    for (int v = 0; v < 2; ++v) acc[v][0] = k3_scaled_fma(s[v] * xsc, ws[v][g], acc[v][0]);
++    for (int v = 0; v < 2; ++v) acc[v][0] = ds_fast_scaled_fma(s[v] * xsc, ws[v][g], acc[v][0]);
+   }
+   ds_up_out_fast<1>(acc, vals, act, wts, pairs, a, first, 0, 1, nl, n, c);
+ }
+@@ -113,7 +113,7 @@ inline void ds_rows_chains_fast(thread float (&acc)[NW][RP], device const T* X,
+     for (uint v = 0; v < NW; ++v)
+       for (uint r = 0; r < RP; ++r) {
+         const float xsc = DOWN ? 1.0f : XS[src[r] * G + g];
+-        acc[v][r] = k3_scaled_fma(s[v][r] * xsc, ws[v][g], acc[v][r]);
++        acc[v][r] = ds_fast_scaled_fma(s[v][r] * xsc, ws[v][g], acc[v][r]);
+       }
+   }
+ }
+@@ -183,7 +183,7 @@ inline void ds_upc_pass_fast(threadgroup float* vals, device const half* XH, dev
+           s = fma(x4[j], (4 * i + j < 8 ? wlo[4 * i + j] : whi[4 * i + j - 8]), s);
+       }
+     }
+-    acc = k3_scaled_fma(s, ws[g], acc);
++    acc = ds_fast_scaled_fma(s, ws[g], acc);
+   }
+   const bfloat v = bfloat(ds_xtree8_fast(acc));
+   if (c == 0) out[first * a.N + n] = v;
+diff --git a/zig/src/families/deepseek_v41/metal/boot.zig b/zig/src/families/deepseek_v41/metal/boot.zig
+index 35bc9d3..12095db 100644
+--- a/zig/src/families/deepseek_v41/metal/boot.zig
++++ b/zig/src/families/deepseek_v41/metal/boot.zig
+@@ -47,6 +47,8 @@ pub const Options = struct {
+     max_images: u32 = 4,
+     /// opt-in FP64-certified BF16 dense FP8 and routed experts on M5 Ultra Metal 4.1 (null: read env)
+     fp64_bf16: ?bool = null,
++    /// keep stock FP32 hardware-MMA target decode/verify alongside M5 Ultra prefill and DSpark acceleration (null: read env)
++    fast_decode: ?bool = null,
+ };
+ 
+ /// The family's queue: Metal 4 under TF_METAL4=1, or by default when `metal4` holds, else Metal 3; the same kernels.
+@@ -95,16 +97,22 @@ pub const Boot = struct {
+         b.device = try mtl.Device.init();
+         errdefer b.device.deinit();
+         const fp64_bf16 = o.fp64_bf16 orelse try environment.read(bool, "TF_DSV41_FP64_BF16", false);
++        const fast_decode = o.fast_decode orelse try environment.read(bool, "TF_DSV41_M5_FAST_DECODE", false);
++        const cert_decode = fp64_bf16 and !fast_decode;
+         if (fp64_bf16) {
+             if (!pipelines.fp8_mma_cert.supported(b.device)) {
+                 std.log.err("dsv41 metal: TF_DSV41_FP64_BF16=1 requires Apple M5 Ultra with Metal 4.1 (macOS 27+); found {s} (gen {d}, macOS {d})", .{ std.mem.span(b.device.name()), b.device.generation(), mtl.objc.osVersion().major });
+                 return error.UnsupportedFp64Bf16;
+             }
+-            std.log.info("dsv41 metal: TF_DSV41_FP64_BF16=1 active (FP64-certified BF16 dense FP8 and routed MXFP4 expert kernels on {s})", .{std.mem.span(b.device.name())});
++            if (fast_decode) {
++                std.log.info("dsv41 metal: M5 Ultra fast serve active (FP64-certified BF16 prefill + DSpark stack + FP32 hardware-MMA target decode on {s})", .{std.mem.span(b.device.name())});
++            } else {
++                std.log.info("dsv41 metal: TF_DSV41_FP64_BF16=1 active (FP64-certified BF16 dense FP8 and routed MXFP4 expert kernels on {s})", .{std.mem.span(b.device.name())});
++            }
+         }
+         b.queue = try openQueue(b.device, b.device.hasMetal4());
+         errdefer b.queue.deinit();
+-        b.p = try pipelines.Pipelines.loadWith(a, b.device, c, fp64_bf16);
++        b.p = try pipelines.Pipelines.loadMode(a, b.device, c, fp64_bf16, cert_decode);
+         errdefer b.p.deinit();
+         var pack = try host.pack.Pack.open(a, io, dir);
+         defer pack.deinit();
+diff --git a/zig/src/families/deepseek_v41/metal/ctx.zig b/zig/src/families/deepseek_v41/metal/ctx.zig
+index 28f1955..21d395f 100644
+--- a/zig/src/families/deepseek_v41/metal/ctx.zig
++++ b/zig/src/families/deepseek_v41/metal/ctx.zig
+@@ -75,7 +75,7 @@ pub const Ctx = struct {
+                 const call: mma.Call = .{ .k = w.k, .n = w.n, .rows = x.rows, .out = if (f32_out) .f32 else .bf16 };
+                 return mma.encodeFast(mc, e, cv(mma.Ref, in), cv(mma.Ref, w.w), cv(mma.Ref, w.s), cv(mma.Ref, out), call, .{ .n = b.n, .xs = b.xs, .ws = b.ws, .ss = b.ss, .ys = b.ys });
+             }
+-            if (!f32_out) {
++            if (x.p.cert_decode and !f32_out) {
+                 const mcall: mma.Call = .{ .k = w.k, .n = w.n, .rows = x.rows, .out = .bf16 };
+                 if (mma.takesSmall(mcall, b.n)) return mma.encodeSmall(mc, e, cv(mma.Ref, in), cv(mma.Ref, w.w), cv(mma.Ref, w.s), cv(mma.Ref, out), mcall, .{ .n = b.n, .xs = b.xs, .ws = b.ws, .ss = b.ss, .ys = b.ys });
+             }
+diff --git a/zig/src/families/deepseek_v41/metal/dspark.zig b/zig/src/families/deepseek_v41/metal/dspark.zig
+index 7241f6c..187b889 100644
+--- a/zig/src/families/deepseek_v41/metal/dspark.zig
++++ b/zig/src/families/deepseek_v41/metal/dspark.zig
+@@ -45,6 +45,8 @@ pub const Launch = struct {
+     asks: []const Ask,
+     /// asks whose chain runs on the GPU behind the head (the whole vocabulary; greedy, or keyed rows the host races)
+     gpu: bool = false,
++    /// whether this launch uses the top-K single-TG Markov chain (filtered/nucleus asks, or always in cert_decode mode)
++    use_topk: bool = false,
+     at: [R]u32 = undefined,
+ };
+ 
+@@ -177,9 +179,9 @@ pub const Pass = struct {
+         x.a.destroy(x);
+     }
+ 
+-    /// The launch context of `rows` rows (uses fast non-dd M5 NAX / MXFP4 when TF_DSV41_FP64_BF16=1 is active).
++    /// The launch context of `rows` rows (uses fast non-dd M5 NAX / MXFP4 when cert_decode is active or rows > max_rows).
+     pub fn ctx(x: *const Pass, rows: u32) Ctx {
+-        return .{ .c = x.c, .p = x.p, .s = x.s, .slot = &x.noslot, .tables = x.tables, .p0 = 0, .rows = rows, .fast = x.p.mma_cert != null };
++        return .{ .c = x.c, .p = x.p, .s = x.s, .slot = &x.noslot, .tables = x.tables, .p0 = 0, .rows = rows, .fast = x.p.cert_decode or (x.p.mma_cert != null and rows > pipelines.max_rows) };
+     }
+ 
+     /// The heads the family's chain and trees read.
+@@ -189,7 +191,7 @@ pub const Pass = struct {
+ 
+     /// After a slot's verify window of `rows`: whether its next passes make the whole block or the narrow one.
+     pub fn note(x: *Pass, slot: u32, rows: u32) void {
+-        x.adapt.note(slot, rows, x.opt.narrow, x.c.dspark_block, x.p.mma_cert != null);
++        x.adapt.note(slot, rows, x.opt.narrow, x.c.dspark_block, x.p.cert_decode);
+     }
+ 
+     /// The drafts a pass makes for a slot: the whole block after a wide window, else the narrow one.
+@@ -370,6 +372,11 @@ pub const Pass = struct {
+         return !p.sampled or picks_.raced(p.sampling().?, x.c.vocab);
+     }
+ 
++    /// Whether an ask requires top-K GPU Markov filtering (filtered top_k/top_p/min_p or pure nucleus).
++    pub fn needsTopK(x: *const Pass, p: Params) bool {
++        return p.sampled and !picks_.raced(p.sampling().?, x.c.vocab);
++    }
++
+     /// The most slots a launch carries (rows are limited to 16).
+     pub fn group(x: *const Pass) u32 {
+         return @max(1, R / x.c.dspark_block);
+@@ -380,7 +387,12 @@ pub const Pass = struct {
+         const n = x.blockFor(asks);
+         if (asks.len == 0 or asks.len > x.group()) return error.Slots;
+         var l: Launch = .{ .rows = @intCast(asks.len * n), .n = n, .asks = asks, .gpu = x.mk != null };
+-        for (asks) |a| l.gpu = l.gpu and x.drawsOnGpu(a.params);
++        var any_topk = false;
++        for (asks) |a| {
++            l.gpu = l.gpu and x.drawsOnGpu(a.params);
++            any_topk = any_topk or x.needsTopK(a.params);
++        }
++        l.use_topk = if (x.mk) |m| (m.topk > 0 and (x.p.cert_decode or any_topk)) else false;
+         if (l.gpu) for (asks, 0..) |a, j| x.mk.?.writeAsk(j, a.params);
+         if (x.ib != null) {
+             const pool = mtl.objc.Pool.push();
+@@ -439,7 +451,7 @@ pub const Pass = struct {
+         const m = &(x.mk orelse return error.NoGpuChain);
+         const n = l.n;
+         e.barrier();
+-        if (m.topk > 0) {
++        if (l.use_topk and m.topk > 0) {
+             mkv.encodeTopK(&m.p, e, &m.t, &m.o, ctx_.cv(mkv.Ref, x.b.logits), ctx_.cv(mkv.Ref, x.b.hf), ctx_.cv(mkv.Ref, x.b.ids), x.c.vocab, x.c.hidden, l.rows / n, n, m.topk);
+         } else {
+             mkv.encode(&m.p, e, &m.t, &m.o, ctx_.cv(mkv.Ref, x.b.logits), ctx_.cv(mkv.Ref, x.b.hf), ctx_.cv(mkv.Ref, x.b.ids), x.c.vocab, x.c.hidden, l.rows / n, n);
+@@ -485,7 +497,7 @@ pub const Pass = struct {
+         const m = &x.mk.?;
+         const drafts = m.o.drafts(l.rows);
+         const conf = m.o.conf(l.rows);
+-        const gpu_cands = m.topk > 0 and k == m.topk;
++        const gpu_cands = l.use_topk and m.topk > 0 and k == m.topk;
+         var cpu_cand: ?[]i32 = null;
+         var cpu_base: ?[]f32 = null;
+         defer if (cpu_cand) |b| x.a.free(b);
+diff --git a/zig/src/families/deepseek_v41/metal/early.zig b/zig/src/families/deepseek_v41/metal/early.zig
+index 96377b1..1c472f9 100644
+--- a/zig/src/families/deepseek_v41/metal/early.zig
++++ b/zig/src/families/deepseek_v41/metal/early.zig
+@@ -55,6 +55,8 @@ const Chain = struct {
+     begun: bool = false,
+     /// its pass's chain runs on the GPU (dspark.Pass.drawsOnGpu for all slots)
+     gpu: bool = false,
++    /// whether the queued pass uses top-K GPU Markov (filtered/nucleus or cert_decode) vs full-vocab
++    use_topk: bool = false,
+     /// the drafts its pass makes per slot
+     block: u32 = 0,
+     cb: mtl.CommandBuffer = undefined,
+@@ -223,6 +225,7 @@ pub const Early = struct {
+         var B: u32 = c.dspark_block;
+         var total_rows: u32 = 0;
+         var any_keyed = false;
++        var any_topk = false;
+         var gpu = x.mk != null;
+         var ch: Chain = .{ .n_slots = G };
+         for (group, 0..) |g, j| {
+@@ -239,7 +242,9 @@ pub const Early = struct {
+             B = @min(B, x.blockOf(g.slot));
+             const keyed = if (g.sampling) |s| s.temperature > 0 else false;
+             any_keyed = any_keyed or keyed;
+-            gpu = gpu and x.drawsOnGpu(host.dspark.Params.of(g.sampling, 0));
++            const dparams = host.dspark.Params.of(g.sampling, 0);
++            gpu = gpu and x.drawsOnGpu(dparams);
++            any_topk = any_topk or x.needsTopK(dparams);
+             ch.slots[j] = .{ .slot = g.slot, .start = g.start, .rows = n, .r0 = total_rows, .taps = taps[j] };
+             total_rows += n;
+         }
+@@ -247,6 +252,7 @@ pub const Early = struct {
+         for (group) |g| if (g.start + g.tokens.len + B > x.tables.positions) return;
+         ch.block = B;
+         ch.gpu = gpu;
++        ch.use_topk = if (x.mk) |m| (m.topk > 0 and (x.p.cert_decode or any_topk)) else false;
+         const skew = e.skew_every > 0 and ch.slots[0].rows > 1 and (e.stats.queued + 1) % e.skew_every == 0;
+         e.stageCert(group, &ch, B, skew);
+         const pool = mtl.objc.Pool.push();
+@@ -330,7 +336,7 @@ pub const Early = struct {
+             };
+         }
+         ce.barrier();
+-        const l: dspark.Launch = .{ .rows = G * ch.block, .n = ch.block, .asks = &.{}, .gpu = ch.gpu };
++        const l: dspark.Launch = .{ .rows = G * ch.block, .n = ch.block, .asks = &.{}, .gpu = ch.gpu, .use_topk = ch.use_topk };
+         const done = x.encodeAll(ce, &l);
+         ce.end();
+         try done;
+@@ -402,7 +408,7 @@ pub const Early = struct {
+                 asks_grp[idx] = ch.slots[idx].ask.?;
+                 props_grp[idx] = out[k];
+             }
+-            const l: dspark.Launch = .{ .rows = @as(u32, @intCast(ch.n_slots)) * ch.block, .n = ch.block, .asks = asks_grp[0..ch.n_slots], .gpu = ch.gpu };
++            const l: dspark.Launch = .{ .rows = @as(u32, @intCast(ch.n_slots)) * ch.block, .n = ch.block, .asks = asks_grp[0..ch.n_slots], .gpu = ch.gpu, .use_topk = ch.use_topk };
+             try e.x.finish(&l, props_grp[0..ch.n_slots]);
+             e.stats.used += 1;
+             return;
+diff --git a/zig/src/families/deepseek_v41/metal/entry.zig b/zig/src/families/deepseek_v41/metal/entry.zig
+index 7e37b51..34aab0e 100644
+--- a/zig/src/families/deepseek_v41/metal/entry.zig
++++ b/zig/src/families/deepseek_v41/metal/entry.zig
+@@ -47,6 +47,7 @@ pub fn open(a: Allocator, gpa: Allocator, io: std.Io, o: api.Open, problem: *[]c
+         .steps = steps,
+         .decode_share = o.decode_share,
+         .fp64_bf16 = try env.read(bool, "TF_DSV41_FP64_BF16", false),
++        .fast_decode = try env.read(bool, "TF_DSV41_M5_FAST_DECODE", false),
+     };
+     const m = pkg.boot.Boot.open(gpa, io, o.dir, opts) catch |e| {
+         problem.* = switch (e) {
+diff --git a/zig/src/families/deepseek_v41/metal/experts.zig b/zig/src/families/deepseek_v41/metal/experts.zig
+index cfbe39a..22157d6 100644
+--- a/zig/src/families/deepseek_v41/metal/experts.zig
++++ b/zig/src/families/deepseek_v41/metal/experts.zig
+@@ -55,6 +55,15 @@ pub const Pipelines = struct {
+         return loadSource(device, text);
+     }
+ 
++    /// Load stock FP32 decode expert kernels plus the fast non-dd DSpark variants (`experts_fast_cert.metal`).
++    pub fn loadStockWithFast(a: std.mem.Allocator, device: mtl.Device) !Pipelines {
++        const base = try source(a, "", &.{});
++        defer a.free(base);
++        const text = try std.mem.concat(a, u8, &.{ base, "\n", sources.dsv41.experts_fast_cert });
++        defer a.free(text);
++        return loadSourceOpt(device, text, true);
++    }
++
+     /// The same kernels from other text: the contract's planted controls edit it.
+     pub fn loadSource(device: mtl.Device, text: []const u8) !Pipelines {
+         return loadSourceOpt(device, text, false);
+diff --git a/zig/src/families/deepseek_v41/metal/moe.zig b/zig/src/families/deepseek_v41/metal/moe.zig
+index 2ab1111..df39ffc 100644
+--- a/zig/src/families/deepseek_v41/metal/moe.zig
++++ b/zig/src/families/deepseek_v41/metal/moe.zig
+@@ -34,7 +34,7 @@ pub fn encodeWith(x: *const Ctx, e: mtl.ComputeEncoder, w: *const weights.Layer,
+     const route: ex.Route = .{ .ids = cv(ex.Ref, s.picks), .weights = cv(ex.Ref, s.wts), .slots = cv(ex.Ref, s.plan[0]), .nslots = cv(ex.Ref, s.plan[1]), .pairs = cv(ex.Ref, s.plan[2]), .where = cv(ex.Ref, s.plan[3]) };
+     const rt: g.Route = .{ .logits = s.logits, .bias = w.gate_b, .bias_vl = w.gate_bvl orelse w.gate_b, .image = s.image, .picks = s.picks, .weights = s.wts };
+     const table: ex.Ref = .{ .buf = w.table };
+-    const use_xu = !x.fast and sh.topk == ex.topk and x.p.xmma_cert != null and R >= 2;
++    const use_xu = x.p.cert_decode and !x.fast and sh.topk == ex.topk and x.p.xmma_cert != null and R >= 2;
+     if (sh.plan) |pp| {
+         // the gate's logits, route and plan in one launch beside the shared FP8 w1 and w3 and act_quant(x)
+         g.gatePlan(pp, e, rt, s.plan, s.hn2, w.gate_w, s.sync, R, c.hidden, sh.experts, sh.topk, c.routed_scale);
+diff --git a/zig/src/families/deepseek_v41/metal/pipelines.zig b/zig/src/families/deepseek_v41/metal/pipelines.zig
+index 7e6fc8c..09a6f89 100644
+--- a/zig/src/families/deepseek_v41/metal/pipelines.zig
++++ b/zig/src/families/deepseek_v41/metal/pipelines.zig
+@@ -48,6 +48,8 @@ pub const Pipelines = struct {
+     mma: fp8_mma.Pipelines,
+     /// opt-in FP64-certified BF16 prompt dense FP8 kernels (Apple M5 Ultra Metal 4.1 only)
+     mma_cert: ?fp8_mma_cert.Pipelines = null,
++    /// whether target decode/verify also uses 48-bit dd certified kernels (false keeps stock FP32 hardware-MMA target decode)
++    cert_decode: bool = false,
+     attn: attn.Pipelines,
+     index: index.Pipelines,
+     experts: experts.Pipelines,
+@@ -79,12 +81,17 @@ pub const Pipelines = struct {
+     }
+ 
+     pub fn loadWith(a: std.mem.Allocator, device: mtl.Device, c: *const Config, fp64_bf16: bool) !Pipelines {
++        return loadMode(a, device, c, fp64_bf16, fp64_bf16);
++    }
++
++    pub fn loadMode(a: std.mem.Allocator, device: mtl.Device, c: *const Config, fp64_bf16: bool, cert_decode: bool) !Pipelines {
+         try check(c);
+         if (fp64_bf16 and !fp8_mma_cert.supported(device)) return error.UnsupportedFp64Bf16;
+         var p: Pipelines = undefined;
+-        p.fp8 = if (fp64_bf16) try fp8.Pipelines.loadSource(device, sources.dsv41.fp8_rows_cert) else try fp8.Pipelines.load(device);
++        p.cert_decode = cert_decode;
++        p.fp8 = if (cert_decode) try fp8.Pipelines.loadSource(device, sources.dsv41.fp8_rows_cert) else try fp8.Pipelines.load(device);
+         errdefer p.fp8.deinit();
+-        p.tile = if (fp64_bf16) try fp8_tile.Pipelines.loadSource(device, sources.dsv41.fp8_tile_cert) else try fp8_tile.Pipelines.load(device);
++        p.tile = if (cert_decode) try fp8_tile.Pipelines.loadSource(device, sources.dsv41.fp8_tile_cert) else try fp8_tile.Pipelines.load(device);
+         errdefer p.tile.deinit();
+         p.mma = try fp8_mma.Pipelines.load(device);
+         errdefer p.mma.deinit();
+@@ -94,11 +101,11 @@ pub const Pipelines = struct {
+         errdefer p.attn.deinit();
+         p.index = try index.Pipelines.load(device);
+         errdefer p.index.deinit();
+-        p.experts = if (fp64_bf16) blk: {
++        p.experts = if (cert_decode) blk: {
+             const dsrc = try xmma_cert.decodeSource(a, "");
+             defer a.free(dsrc);
+             break :blk try experts.Pipelines.loadSourceWithFast(device, dsrc);
+-        } else try experts.Pipelines.load(a, device);
++        } else if (fp64_bf16) try experts.Pipelines.loadStockWithFast(a, device) else try experts.Pipelines.load(a, device);
+         errdefer p.experts.deinit();
+         p.glue = try glue.Pipelines.load(device, sources.dsv41.glue_tmp);
+         errdefer p.glue.deinit();
+@@ -106,7 +113,7 @@ pub const Pipelines = struct {
+         errdefer p.mv_mma.deinit();
+         p.compress = try compress.Pipelines.load(device);
+         errdefer p.compress.deinit();
+-        p.engram = if (fp64_bf16) try engram.Pipelines.loadWith(device, sources.dsv41.engram, sources.dsv41.fp8_rows_cert) else try engram.Pipelines.load(device);
++        p.engram = if (cert_decode) try engram.Pipelines.loadWith(device, sources.dsv41.engram, sources.dsv41.fp8_rows_cert) else try engram.Pipelines.load(device);
+         errdefer p.engram.deinit();
+         p.route = try routeAt(a, device, c.experts, c.topk, "tf_dsv41_route_select");
+         errdefer p.route.deinit();
+diff --git a/zig/src/platform/environment.zig b/zig/src/platform/environment.zig
+index 01c2847..acb8e07 100644
+--- a/zig/src/platform/environment.zig
++++ b/zig/src/platform/environment.zig
+@@ -106,6 +106,7 @@ pub const rules = [_]Rule{
+     .{ .name = "TF_QWEN35_METAL_KV_PAGES", .scope = .metal, .kind = .flag, .forms = "0 or 1 (1 puts the streams' keys and values in core-pool pages; unset or blank is 0)" },
+     .{ .name = "TF_DSV41_SMALL", .scope = .metal, .kind = .flag, .forms = "0 or 1 (1 reads a DeepSeek-V4.1 Metal checkpoint's config at its own small shapes)" },
+     .{ .name = "TF_DSV41_FP64_BF16", .scope = .metal, .kind = .flag, .forms = "0 or 1 (1 opts DeepSeek-V4.1 on Apple M5 Ultra Metal 4.1 into FP64-certified BF16 kernels; default 0)" },
++    .{ .name = "TF_DSV41_M5_FAST_DECODE", .scope = .metal, .kind = .flag, .forms = "0 or 1 (1 keeps stock FP32 hardware-MMA target decode/verify alongside M5 Ultra prefill and DSpark acceleration under TF_DSV41_FP64_BF16=1; default 0)" },
+     .{ .name = "TF_DSV41_ASSETS", .scope = .metal, .kind = .path, .forms = "a directory path without control characters holding DeepSeek-V4.1's Engram token map" },
+     .{ .name = "TF_DSV41_ENGRAM_DIR", .scope = .metal, .kind = .path, .forms = "a directory path without control characters holding DeepSeek-V4.1's packed Engram tables" },
+     .{ .name = "TF_DSV41_ENGRAM_VERIFY", .scope = .metal, .kind = .word, .words = &.{ "sample", "full" }, .forms = "sample or full (full also checks every byte of the Engram tables at boot)" },
