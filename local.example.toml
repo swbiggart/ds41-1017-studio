@@ -1,0 +1,16 @@
+# Copy to local.toml and uncomment only the settings you want to change.
+[serve]
+# drafts = false        # Decode serially with the same optimized Metal engine.
+# prompt_cache = false  # Disable prompt-state reuse for cold controls.
+# context = 32768       # Maximum prompt + reply tokens. Default: 139264.
+# parallel = 2          # Concurrent client slots (1-16). Default: 1.
+
+[model]
+# model_dir = "/Volumes/Models/DeepSeek-V4.1-Flash-1017"
+# engram_dir = "/Volumes/Models/DeepSeek-V4.1-Flash-1017-engram"
+# assets_dir = "/Volumes/Models/DeepSeek-V4.1-Flash-1017-assets"
+
+[local]
+# host = "127.0.0.1"
+# port = 8890
+# state_dir = ".local/server"

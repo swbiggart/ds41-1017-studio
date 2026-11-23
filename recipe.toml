@@ -1,0 +1,25 @@
+# Checkpoint and build-tool revisions are pinned. Put machine-specific settings in local.toml.
+[model]
+source_repo = "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+source_revision = "08c8657f02291e11b6f6b63e0e16014f8e748518"
+served_name = "deepseek-v41-flash-1017-official"
+model_dir = ".local/checkpoint"
+engram_dir = ".local/engram"
+assets_dir = ".local/assets"
+
+[engine]
+tensorfold_repo = "https://github.com/ashhart/TensorFold.git"
+tensorfold_tag = "v1.3.3"
+tensorfold_sha = "1e4a32cb5e80f2908e4642f9e7ffe71ae63792cc"
+tensorfold_src = ".local/tensorfold-v133"
+
+[local]
+host = "127.0.0.1"
+port = 8890
+state_dir = ".local/server"
+
+[serve]
+context = 139264
+parallel = 1
+drafts = true
+prompt_cache = true
