@@ -1,0 +1,9 @@
+.local/
+.venv/
+runs/
+local.toml
+__pycache__/
+*.pyc
+dist/
+.zig-cache/
+.ruff_cache/
