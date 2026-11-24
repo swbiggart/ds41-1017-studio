@@ -14,6 +14,8 @@ def recipe_path(value):
 class Settings:
     repo: str
     revision: str
+    repack_repo: str
+    repack_revision: str
     name: str
     model: Path
     engram: Path
@@ -140,6 +142,8 @@ def load():
     return Settings(
         repo=model["source_repo"],
         revision=model["source_revision"],
+        repack_repo=model["repack_repo"],
+        repack_revision=model["repack_revision"],
         name=model["served_name"],
         model=recipe_path(model["model_dir"]),
         engram=recipe_path(model["engram_dir"]),

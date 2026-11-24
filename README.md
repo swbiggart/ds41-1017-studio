@@ -23,35 +23,36 @@ Serve DeepSeek's `DeepSeek-V4.1-Flash-1017` checkpoint (official or locally loss
 
 See [PROFILES.md](PROFILES.md) for per-request receipts and parity details, and [SETTINGS.md](SETTINGS.md) for serving flags.
 
-- **Pinned checkpoint:** [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/tree/08c8657f02291e11b6f6b63e0e16014f8e748518) (`08c8657f02291e11b6f6b63e0e16014f8e748518`)
+- **Pinned upstream checkpoint:** [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/tree/08c8657f02291e11b6f6b63e0e16014f8e748518) (`08c8657f02291e11b6f6b63e0e16014f8e748518`)
+- **Pinned lossless repack (default download):** [`swbiggart/DeepSeek-V4.1-Flash-1017-TensorFold-Metal-Lossless`](https://huggingface.co/swbiggart/DeepSeek-V4.1-Flash-1017-TensorFold-Metal-Lossless/tree/e9b17382756ff4d6ad988217539fc3799ef9c305) (`e9b17382756ff4d6ad988217539fc3799ef9c305`, bit-exact 45 aligned shards + pre-packed `engram/` + `assets/`, `475.26 GiB` total)
 - **Pinned engine:** TensorFold `v1.3.3` (`1e4a32cb5e80f2908e4642f9e7ffe71ae63792cc`) + [`patches/01-m5-metal-dspark-stack.patch`](patches/01-m5-metal-dspark-stack.patch) + [`patches/02-m5-fast-decode-mode.patch`](patches/02-m5-fast-decode-mode.patch) + [`patches/03-m5-nax-prefill-repack-fast.patch`](patches/03-m5-nax-prefill-repack-fast.patch) (0 modified upstream `.metal` files)
 
 ## Quick start
 
-Requires an Apple Silicon Mac with 512 GB unified memory, macOS 27+ (Metal 4.1), Python 3.12, Git, Xcode command-line tools, and ~715 GB SSD space during initial fetch/prepare (dropping to ~480 GB total once repacked and the duplicate raw Engram shards are removed).
+Requires an Apple Silicon Mac with 512 GB unified memory, macOS 27+ (Metal 4.1), Python 3.12, Git, Xcode command-line tools, and ~480 GB SSD space for the pre-repacked Hugging Face release (no local Engram packing or repacking required):
 
 ```sh
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install 'huggingface_hub==1.31.0'
+python -m pip install 'huggingface_hub==1.31.0' hf_xet
 python -m mac build
 python -m mac fetch
-python scripts/verify_checkpoint.py .local/checkpoint --sha256
-python -m mac prepare
-python -m mac repack --verify
-```
-
-Point `local.toml` at `.local/checkpoint-repacked` (see [`local.example.toml`](local.example.toml)) — or serve the original checkpoint directly if you prefer not to repack — then validate and start:
-
-```sh
 python -m mac validate
 python -m mac up
 python -m mac chat 'Write a Python generator that merges two sorted iterators.' --max-tokens 128
 ```
 
-**Why repack?** `python -m mac repack --verify` streams the official checkpoint in ~22 s (`12.8 GiB/s`) into 45 lossless per-consumer shards (`model-top`, `model-layer-00..39`, `model-mtp-0..2`, `model-vision`) with 16 KiB header alignment and 128-byte tensor alignment, omitting the 4 raw `.engram.embed.*` tensors already packed into `engram/` (`286.42 GiB` on disk, saving `~203 GB`). This eliminates every unaligned shard copy on Metal (dropping copied weight arenas from `7,789 MiB` to `1,567 MiB`, of which `1,263 MiB` is the reversible packed vocabulary head) and enables zero-copy `mmap` residency for both the 40-layer backbone and DSpark `mtp.0..2`.
+`python -m mac fetch` automatically downloads the verified bit-exact lossless repack ([`swbiggart/DeepSeek-V4.1-Flash-1017-TensorFold-Metal-Lossless`](https://huggingface.co/swbiggart/DeepSeek-V4.1-Flash-1017-TensorFold-Metal-Lossless)) — including the 45 aligned shards (`286.42 GiB`), pre-packed DSV41EN1 Engram tables (`engram/`, `188.83 GiB`), and token map (`assets/`) — into `.local/checkpoint-repacked` whenever the original DeepSeek checkpoint is not already present locally.
 
-If you already have the pinned checkpoint and prepared Engram assets on disk, copy [`local.example.toml`](local.example.toml) to `local.toml`, point `[model]` paths at them, and skip `fetch` and `prepare`.
+**Already have DeepSeek's original checkpoint locally (or want to repack from scratch)?** Copy [`local.example.toml`](local.example.toml) to `local.toml`, point `[model]` at your local `deepseek-ai/DeepSeek-V4.1-Flash-1017` directory (or run `python -m mac fetch --original` into `.local/checkpoint`), then run:
+
+```sh
+python scripts/verify_checkpoint.py .local/checkpoint --sha256
+python -m mac prepare
+python -m mac repack --verify
+```
+
+**Why repack?** Whether downloaded pre-repacked or built locally in ~22 s (`12.8 GiB/s`), the 45 lossless per-consumer shards (`model-top`, `model-layer-00..39`, `model-mtp-0..2`, `model-vision`) use 16 KiB header alignment and 128-byte tensor alignment while omitting the 4 redundant raw `.engram.embed.*` tensors already packed into `engram/` (`286.42 GiB` on disk, saving `~203 GB`). This eliminates every unaligned shard copy on Metal (dropping copied weight arenas from `7,789 MiB` to `1,567 MiB`, of which `1,263 MiB` is the reversible packed vocabulary head) and enables zero-copy `mmap` residency for both the 40-layer backbone and DSpark `mtp.0..2`.
 
 The OpenAI-compatible server listens at `http://127.0.0.1:8890/v1` under model ID `deepseek-v41-flash-1017-official`.
 

@@ -1,4 +1,4 @@
-"""Check the local DeepSeek-V4.1-Flash-1017 files against DeepSeek's pinned Hub revision."""
+"""Check local DeepSeek-V4.1-Flash-1017 files against the pinned Hub revision (pre-repacked or original)."""
 
 import argparse
 import hashlib
@@ -11,6 +11,7 @@ from huggingface_hub import HfApi
 
 RECIPE = Path(__file__).resolve().parents[1] / "recipe.toml"
 INDEX = "model.safetensors.index.json"
+REPACK_MANIFEST = "repack-manifest.json"
 REQUIRED = {"config.json", "tokenizer.json", INDEX}
 
 
@@ -44,7 +45,11 @@ def main():
     args = parser.parse_args()
     with RECIPE.open("rb") as source:
         model = tomllib.load(source)["model"]
-    repo, revision = model["source_repo"], model["source_revision"]
+    repacked = (args.checkpoint / REPACK_MANIFEST).is_file()
+    if repacked:
+        repo, revision = model["repack_repo"], model["repack_revision"]
+    else:
+        repo, revision = model["source_repo"], model["source_revision"]
     info = HfApi().model_info(repo, revision=revision, files_metadata=True)
     if info.sha != revision:
         raise RuntimeError("Hub returned an unexpected revision")
@@ -59,8 +64,11 @@ def main():
             file=sys.stderr,
         )
         return 1
+    required = set(REQUIRED)
+    if repacked:
+        required.add(REPACK_MANIFEST)
     files = (
-        REQUIRED
+        required
         | shards
         | {name for name in manifest if (args.checkpoint / name).exists()}
     )

@@ -53,9 +53,22 @@ class LauncherTests(unittest.TestCase):
         )
         self.assertEqual(base.repo, "deepseek-ai/DeepSeek-V4.1-Flash-1017")
         self.assertEqual(base.revision, "08c8657f02291e11b6f6b63e0e16014f8e748518")
+        self.assertEqual(
+            base.repack_repo,
+            "swbiggart/DeepSeek-V4.1-Flash-1017-TensorFold-Metal-Lossless",
+        )
+        self.assertEqual(
+            base.repack_revision, "e9b17382756ff4d6ad988217539fc3799ef9c305"
+        )
         self.assertEqual(base.engine_tag, "v1.3.3")
         self.assertEqual(base.engine_sha, "1e4a32cb5e80f2908e4642f9e7ffe71ae63792cc")
-        self.assertEqual(base.model, self.local.parent / ".local/checkpoint")
+        self.assertEqual(base.model, self.local.parent / ".local/checkpoint-repacked")
+        self.assertEqual(
+            base.engram, self.local.parent / ".local/checkpoint-repacked/engram"
+        )
+        self.assertEqual(
+            base.assets, self.local.parent / ".local/checkpoint-repacked/assets"
+        )
 
     def test_build_invokes_engine_build(self):
         with patch.object(engine, "build") as build:
@@ -240,6 +253,114 @@ class LauncherTests(unittest.TestCase):
             mpath.write_text(json.dumps(bad))
             with self.assertRaisesRegex(ValueError, "pinned Flash-1017 index"):
                 prepare.check_shards(replace(config.load(), model=dst))
+
+    def test_fetch_defaults_to_hf_repack_unless_original_present_or_requested(self):
+        import hashlib
+        import types
+
+        calls = []
+
+        def fake_snapshot_download(repo_id, *, revision, local_dir, allow_patterns):
+            calls.append((repo_id, revision, Path(local_dir), list(allow_patterns)))
+
+        fake_hub = types.SimpleNamespace(snapshot_download=fake_snapshot_download)
+        with patch.dict(sys.modules, {"huggingface_hub": fake_hub}):
+            # 1. Fresh install (no local original model) -> downloads pinned HF repack
+            self.run_command("fetch")
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(
+                calls[0][0],
+                "swbiggart/DeepSeek-V4.1-Flash-1017-TensorFold-Metal-Lossless",
+            )
+            self.assertEqual(
+                calls[0][1], "e9b17382756ff4d6ad988217539fc3799ef9c305"
+            )
+            self.assertIn("engram/*", calls[0][3])
+            self.assertIn("assets/*", calls[0][3])
+
+            # 2. Explicit --original -> downloads DeepSeek upstream checkpoint
+            calls.clear()
+            self.run_command("fetch", "--original")
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][0], "deepseek-ai/DeepSeek-V4.1-Flash-1017")
+            self.assertEqual(
+                calls[0][1], "08c8657f02291e11b6f6b63e0e16014f8e748518"
+            )
+
+            # 3. Local original checkpoint already at model_dir -> auto-resumes original
+            orig_dir = self.local.parent / "local-orig"
+            orig_dir.mkdir()
+            idx_bytes = b'{"weight_map":{}}'
+            (orig_dir / "model.safetensors.index.json").write_bytes(idx_bytes)
+            orig_sha = hashlib.sha256(idx_bytes).hexdigest()
+            self.local.write_text(f'[model]\nmodel_dir="{orig_dir}"\n')
+            calls.clear()
+            with patch.object(prepare, "INDEX_SHA256", orig_sha):
+                self.run_command("fetch")
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][0], "deepseek-ai/DeepSeek-V4.1-Flash-1017")
+            self.assertEqual(
+                calls[0][1], "08c8657f02291e11b6f6b63e0e16014f8e748518"
+            )
+
+    def test_prepare_verifies_prepacked_repack_without_running_engram_tool(self):
+        import hashlib
+        import struct
+
+        root = self.local.parent
+        src = root / "orig"
+        dst = root / "repacked"
+        src.mkdir()
+        cfg = b'{"model_type":"deepseek_v41"}\n'
+        tok = b"{}\n"
+        (src / "config.json").write_bytes(cfg)
+        (src / "tokenizer.json").write_bytes(tok)
+
+        raw = b"\x01\x02" * 16
+        hdr = {"embed.weight": {"dtype": "BF16", "shape": [4, 4], "data_offsets": [0, len(raw)]}}
+        hdr_bytes = json.dumps(hdr).encode("utf-8")
+        shard = src / "model-00001-of-00001.safetensors"
+        shard.write_bytes(struct.pack("<Q", len(hdr_bytes)) + hdr_bytes + raw)
+        idx = json.dumps({"metadata": {}, "weight_map": {"embed.weight": shard.name}}).encode("utf-8")
+        (src / "model.safetensors.index.json").write_bytes(idx)
+        src_sha = hashlib.sha256(idx).hexdigest()
+
+        repack.repack_checkpoint(src, dst, workers=1, nocache=False, expected_source_index_sha256=src_sha)
+
+        engram_dir = dst / "engram"
+        assets_dir = dst / "assets"
+        engram_dir.mkdir()
+        assets_dir.mkdir()
+        (engram_dir / "engram-l1-r0of1.bin").write_bytes(b"1234")
+        (engram_dir / "engram-l14-r0of1.bin").write_bytes(b"5678")
+        (engram_dir / "engram-manifest.json").write_text(
+            json.dumps(
+                {
+                    "tables": [
+                        {"layer": 1, "file": "engram-l1-r0of1.bin", "size": 4},
+                        {"layer": 14, "file": "engram-l14-r0of1.bin", "size": 4},
+                    ]
+                }
+            )
+        )
+        tmap = assets_dir / "engram-token-map.bin"
+        tmap.write_bytes(b"tokmap")
+        (assets_dir / "engram-token-map.bin.json").write_text(
+            json.dumps(
+                {
+                    "packed_sha256": hashlib.sha256(b"tokmap").hexdigest(),
+                    "tokenizer_sha256": hashlib.sha256(tok).hexdigest(),
+                    "config_sha256": hashlib.sha256(cfg).hexdigest(),
+                }
+            )
+        )
+        s = replace(config.load(), model=dst, engram=engram_dir, assets=assets_dir)
+        with (
+            patch.object(prepare, "INDEX_SHA256", src_sha),
+            patch("mac.prepare.subprocess.run") as sub_run,
+        ):
+            prepare.prepare(s)
+        sub_run.assert_not_called()
 
 
 if __name__ == "__main__":

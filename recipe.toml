@@ -2,10 +2,12 @@
 [model]
 source_repo = "deepseek-ai/DeepSeek-V4.1-Flash-1017"
 source_revision = "08c8657f02291e11b6f6b63e0e16014f8e748518"
+repack_repo = "swbiggart/DeepSeek-V4.1-Flash-1017-TensorFold-Metal-Lossless"
+repack_revision = "e9b17382756ff4d6ad988217539fc3799ef9c305"
 served_name = "deepseek-v41-flash-1017-official"
-model_dir = ".local/checkpoint"
-engram_dir = ".local/engram"
-assets_dir = ".local/assets"
+model_dir = ".local/checkpoint-repacked"
+engram_dir = ".local/checkpoint-repacked/engram"
+assets_dir = ".local/checkpoint-repacked/assets"
 
 [engine]
 tensorfold_repo = "https://github.com/ashhart/TensorFold.git"

@@ -6,7 +6,8 @@
 # parallel = 2          # Concurrent client slots (1-16). Default: 1.
 
 [model]
-# model_dir = ".local/checkpoint-repacked" # Losslessly repacked shards from `python -m mac repack`
+# Defaults fetch the pre-repacked Hugging Face release (including engram/ and assets/)
+# into .local/checkpoint-repacked. Override below to reuse local checkpoints/assets:
 # model_dir = "/Volumes/Models/DeepSeek-V4.1-Flash-1017"
 # engram_dir = "/Volumes/Models/DeepSeek-V4.1-Flash-1017-engram"
 # assets_dir = "/Volumes/Models/DeepSeek-V4.1-Flash-1017-assets"

@@ -41,7 +41,6 @@ def main():
     commands = parser.add_subparsers(dest="cmd", required=True)
     for name, help_text in [
         ("build", "build the pinned TensorFold v1.3.3 Metal engine and asset tools"),
-        ("fetch", "download the original DeepSeek checkpoint, resuming existing files"),
         ("prepare", "build the token map and pack or verify the SSD Engram tables"),
         ("validate", "check local engine, model and asset paths and checksums"),
         ("settings", "show effective serving options and native command"),
@@ -51,6 +50,15 @@ def main():
         ("status", "report process identity and endpoint readiness"),
     ]:
         commands.add_parser(name, help=help_text)
+    fetch_cmd = commands.add_parser(
+        "fetch",
+        help="download the pre-repacked HF release (or resume an existing local original checkpoint)",
+    )
+    fetch_cmd.add_argument(
+        "--original",
+        action="store_true",
+        help="download DeepSeek's original un-repacked checkpoint instead of the pre-repacked HF release",
+    )
     rp = commands.add_parser(
         "repack",
         help="losslessly repack the checkpoint into 128B/16KiB-aligned per-consumer shards (omitting packed Engram)",
@@ -133,7 +141,7 @@ def main():
     if args.cmd == "build":
         engine.build(s)
     elif args.cmd == "fetch":
-        prepare.fetch(s)
+        prepare.fetch(s, original=args.original)
     elif args.cmd == "prepare":
         prepare.prepare(s)
     elif args.cmd == "repack":
@@ -170,6 +178,8 @@ def main():
                     "model": {
                         "repo": s.repo,
                         "revision": s.revision,
+                        "repack_repo": s.repack_repo,
+                        "repack_revision": s.repack_revision,
                         "path": str(s.model),
                     },
                     "serve": {
