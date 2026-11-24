@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 
+from . import repack
+
 INDEX_SHA256 = "74b0686a3d2891980d5e303251b075a3bccae2c2ff650747db2620a649b98fa8"
 
 
@@ -28,7 +30,14 @@ def fetch(s):
     )
 
 
+def is_repacked(model_dir):
+    return (Path(model_dir) / repack.MANIFEST_NAME).is_file()
+
+
 def check_shards(s):
+    if is_repacked(s.model):
+        repack.verify_repack(s.model, expected_source_index_sha256=INDEX_SHA256)
+        return
     index_path = s.model / "model.safetensors.index.json"
     raw_index = index_path.read_bytes()
     if hashlib.sha256(raw_index).hexdigest() != INDEX_SHA256:
@@ -88,6 +97,10 @@ def prepare(s):
         operation = (
             "verify" if (s.engram / "engram-manifest.json").is_file() else "pack"
         )
+        if operation == "pack" and is_repacked(s.model):
+            raise ValueError(
+                f"{s.model} is a repacked checkpoint without raw Engram shards. Run python -m mac prepare on the original checkpoint before repacking."
+            )
         subprocess.run(
             [s.bin / "tf-dsv41-engram-pack", operation, s.model, s.engram], check=True
         )

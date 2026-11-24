@@ -5,30 +5,30 @@ by Scott Biggart · [@woolsey](https://x.com/woolsey)
 [![Follow on X](https://img.shields.io/badge/Follow_on_X-@woolsey-000000?logo=x&logoColor=white)](https://x.com/woolsey)
 [![License Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
 
-Serve DeepSeek's original `DeepSeek-V4.1-Flash-1017` checkpoint on an 80-core M5 Ultra Mac Studio (512 GB unified memory) with TensorFold `v1.3.3` (`1e4a32c`) and standalone Metal 4.1 kernel optimizations.
+Serve DeepSeek's `DeepSeek-V4.1-Flash-1017` checkpoint (official or locally losslessly repacked for zero-copy Metal 4.1 residency) on an 80-core M5 Ultra Mac Studio (512 GB unified memory) with TensorFold `v1.3.3` (`1e4a32c`) and standalone Metal 4.1 kernel optimizations.
 
 ## Headline performance & parity (M5 Ultra 512 GB)
 
 | Workload | Measured | Notes |
 |---|---:|---|
-| Greedy decode (7 workloads, adaptive DSpark) | **93.20 tok/s** | Peaks at **125.4 tok/s** (`multiply-17-23`); **804/804** exact raw token IDs & **7/7** finish reasons vs serial (**1.77×**) |
-| Greedy decode (7 workloads, `--no-drafts`) | **52.54 tok/s** | Serial control with identical target arithmetic |
-| Filtered sampled (`T=0.8, k=20, p=0.95`) | **107.9 / 92.8 tok/s** | Code / chat; **2.05× / 1.78×** vs serial, **100% exact** token IDs |
-| Pure nucleus (`T=0.8, k=0, p=0.95`) | **92.9 / 77.7 tok/s** | Code / chat; **2.68× / 2.26×** vs serial (`34.6 / 34.4 tok/s`), **100% exact** token IDs |
-| 32,768-token Python prompt (cold TTFT / decode) | **19.84 s** / **96.7 tok/s** | **1.86 s faster** (**1.094×**) than stock `v1.3.3` (`19.83 s` vs `21.68 s` serial matched pair) |
-| 32,768-token prompt-cache hit | **0.009 s** / **98.8 tok/s** | **100% exact** token IDs & finish reason vs cold run (`32,768` cached tokens) |
-| 131,072-token Python prompt (cold TTFT / decode) | **79.28 s** / **80.7 tok/s** | Default 139,264-token context |
-| 131,072-token prompt-cache hit | **0.015 s** / **82.4 tok/s** | **100% exact** token IDs & finish reason vs cold run (`131,072` cached tokens) |
-| Concurrent drafted serving (`p=1 / 2 / 4 / 8`) | **123.5 / 101.2 / 96.7 / 114.9 tok/s** | Active-window throughput across 1–8 simultaneous clients |
+| Greedy decode (7 workloads, adaptive DSpark) | **97.06 tok/s** | Peaks at **133.1 tok/s** (`multiply-17-23`); **804/804** exact raw token IDs & **7/7** finish reasons vs serial (**1.84×**) |
+| Greedy decode (7 workloads, `--no-drafts`) | **52.84 tok/s** | Serial control with identical target arithmetic |
+| Filtered sampled (`T=0.8, k=20, p=0.95`) | **116.3 / 92.8 tok/s** | Code / chat; **2.19× / 1.76×** vs serial, **100% exact** token IDs |
+| Pure nucleus (`T=0.8, k=0, p=0.95`) | **97.0 / 78.2 tok/s** | Code / chat; **2.81× / 2.28×** vs serial (`34.5 / 34.3 tok/s`), **100% exact** token IDs |
+| 32,768-token Python prompt (cold TTFT / decode) | **8.78 s** (`3,733 tok/s`) / **119.2 tok/s** | **2.47× faster prefill** (`-12.91 s`) than stock `v1.3.3` (`8.75 s` vs `21.67 s` serial matched pair) |
+| 32,768-token prompt-cache hit | **0.0087 s** / **123.2 tok/s** | **100% exact** token IDs & finish reason vs cold run (`32,768` cached tokens) |
+| 131,072-token Python prompt (cold TTFT / decode) | **33.44 s** (`3,920 tok/s`) / **97.0 tok/s** | Default 139,264-token context; **0 MB swap** |
+| 131,072-token prompt-cache hit | **0.0143 s** / **98.6 tok/s** | **100% exact** token IDs & finish reason vs cold run (`131,072` cached tokens) |
+| Concurrent drafted serving (`p=1 / 2 / 4 / 8`) | **120.9 / 106.0 / 121.9 / 127.2 tok/s** | Active-window throughput across 1–8 simultaneous clients |
 
 See [PROFILES.md](PROFILES.md) for per-request receipts and parity details, and [SETTINGS.md](SETTINGS.md) for serving flags.
 
 - **Pinned checkpoint:** [`deepseek-ai/DeepSeek-V4.1-Flash-1017`](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/tree/08c8657f02291e11b6f6b63e0e16014f8e748518) (`08c8657f02291e11b6f6b63e0e16014f8e748518`)
-- **Pinned engine:** TensorFold `v1.3.3` (`1e4a32cb5e80f2908e4642f9e7ffe71ae63792cc`) + [`patches/01-m5-metal-dspark-stack.patch`](patches/01-m5-metal-dspark-stack.patch) + [`patches/02-m5-fast-decode-mode.patch`](patches/02-m5-fast-decode-mode.patch)
+- **Pinned engine:** TensorFold `v1.3.3` (`1e4a32cb5e80f2908e4642f9e7ffe71ae63792cc`) + [`patches/01-m5-metal-dspark-stack.patch`](patches/01-m5-metal-dspark-stack.patch) + [`patches/02-m5-fast-decode-mode.patch`](patches/02-m5-fast-decode-mode.patch) + [`patches/03-m5-nax-prefill-repack-fast.patch`](patches/03-m5-nax-prefill-repack-fast.patch) (0 modified upstream `.metal` files)
 
 ## Quick start
 
-Requires an Apple Silicon Mac with 512 GB unified memory, macOS 27+ (Metal 4), Python 3.12, Git, Xcode command-line tools, and ~715 GB SSD space for the original checkpoint shards and packed Engram tables.
+Requires an Apple Silicon Mac with 512 GB unified memory, macOS 27+ (Metal 4.1), Python 3.12, Git, Xcode command-line tools, and ~715 GB SSD space during initial fetch/prepare (dropping to ~480 GB total once repacked and the duplicate raw Engram shards are removed).
 
 ```sh
 python3.12 -m venv .venv
@@ -38,10 +38,18 @@ python -m mac build
 python -m mac fetch
 python scripts/verify_checkpoint.py .local/checkpoint --sha256
 python -m mac prepare
+python -m mac repack --verify
+```
+
+Point `local.toml` at `.local/checkpoint-repacked` (see [`local.example.toml`](local.example.toml)) — or serve the original checkpoint directly if you prefer not to repack — then validate and start:
+
+```sh
 python -m mac validate
 python -m mac up
 python -m mac chat 'Write a Python generator that merges two sorted iterators.' --max-tokens 128
 ```
+
+**Why repack?** `python -m mac repack --verify` streams the official checkpoint in ~22 s (`12.8 GiB/s`) into 45 lossless per-consumer shards (`model-top`, `model-layer-00..39`, `model-mtp-0..2`, `model-vision`) with 16 KiB header alignment and 128-byte tensor alignment, omitting the 4 raw `.engram.embed.*` tensors already packed into `engram/` (`286.42 GiB` on disk, saving `~203 GB`). This eliminates every unaligned shard copy on Metal (dropping copied weight arenas from `7,789 MiB` to `1,567 MiB`, of which `1,263 MiB` is the reversible packed vocabulary head) and enables zero-copy `mmap` residency for both the 40-layer backbone and DSpark `mtp.0..2`.
 
 If you already have the pinned checkpoint and prepared Engram assets on disk, copy [`local.example.toml`](local.example.toml) to `local.toml`, point `[model]` paths at them, and skip `fetch` and `prepare`.
 

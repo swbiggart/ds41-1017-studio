@@ -1,33 +1,33 @@
 {
-  "timestamp_utc": "2026-11-23T13:16:02.498144+00:00",
+  "timestamp_utc": "2026-11-24T17:29:31.933155+00:00",
   "all_exact": false,
   "comparisons": {
     "python-32k": {
       "exact_match": false,
       "first_diff_index": 2,
       "tokens_compared": 32,
-      "stock_ttft_s": 21.682992708,
-      "optimized_ttft_s": 19.826964709,
-      "ttft_speedup": 1.0936,
-      "ttft_saved_s": 1.856
+      "stock_ttft_s": 21.667899416,
+      "optimized_ttft_s": 8.754919792,
+      "ttft_speedup": 2.4749,
+      "ttft_saved_s": 12.913
     },
     "quicksort-raw": {
-      "exact_match": true,
-      "first_diff_index": null,
+      "exact_match": false,
+      "first_diff_index": 35,
       "tokens_compared": 64,
-      "stock_ttft_s": 0.122646125,
-      "optimized_ttft_s": 0.1208815,
-      "ttft_speedup": 1.0146,
-      "ttft_saved_s": 0.0018
+      "stock_ttft_s": 0.122977416,
+      "optimized_ttft_s": 0.11892,
+      "ttft_speedup": 1.0341,
+      "ttft_saved_s": 0.0041
     },
     "multiply-17-23": {
       "exact_match": true,
       "first_diff_index": null,
       "tokens_compared": 64,
-      "stock_ttft_s": 0.123468625,
-      "optimized_ttft_s": 0.119989,
-      "ttft_speedup": 1.029,
-      "ttft_saved_s": 0.0035
+      "stock_ttft_s": 0.122952125,
+      "optimized_ttft_s": 0.101437541,
+      "ttft_speedup": 1.2121,
+      "ttft_saved_s": 0.0215
     }
   },
   "arms": {
@@ -41,10 +41,10 @@
           "completion_tokens": 32,
           "cached_tokens": 0,
           "drafts": false,
-          "ttft_s": 21.682992708,
-          "decode_s": 0.635029833,
-          "decode_tps": 48.81660417991732,
-          "wall_s": 22.3236,
+          "ttft_s": 21.667899416,
+          "decode_s": 0.635691833,
+          "decode_tps": 48.76576729592812,
+          "wall_s": 22.3104,
           "finish_reason": "length",
           "token_ids": [
             270,
@@ -88,10 +88,10 @@
           "completion_tokens": 64,
           "cached_tokens": 0,
           "drafts": false,
-          "ttft_s": 0.122646125,
-          "decode_s": 1.187204834,
-          "decode_tps": 53.06582166426724,
-          "wall_s": 1.3105,
+          "ttft_s": 0.122977416,
+          "decode_s": 1.189175792,
+          "decode_tps": 52.97786956631892,
+          "wall_s": 1.3127,
           "finish_reason": "length",
           "token_ids": [
             361,
@@ -167,9 +167,9 @@
           "completion_tokens": 64,
           "cached_tokens": 0,
           "drafts": false,
-          "ttft_s": 0.123468625,
-          "decode_s": 1.189388,
-          "decode_tps": 52.96841737095044,
+          "ttft_s": 0.122952125,
+          "decode_s": 1.190004542,
+          "decode_tps": 52.94097440512122,
           "wall_s": 1.3134,
           "finish_reason": "length",
           "token_ids": [
@@ -244,7 +244,7 @@
     },
     "optimized_v133": {
       "binary": ".local/tensorfold-v133/zig-out/bin/tensorfold-dsv41",
-      "binary_sha256": "da349690bf1e96c72d7e750fe514cb19b1ce8714340a84670a622eef858f65ae",
+      "binary_sha256": "dfdbff1342495c30ef46cbde5c4c2c8c8eb61ae361abd24d4d1fc0974c79ef18",
       "cases": {
         "python-32k": {
           "name": "python-32k",
@@ -252,10 +252,10 @@
           "completion_tokens": 32,
           "cached_tokens": 0,
           "drafts": false,
-          "ttft_s": 19.826964709,
-          "decode_s": 0.634557625,
-          "decode_tps": 48.85293120542047,
-          "wall_s": 20.4659,
+          "ttft_s": 8.754919792,
+          "decode_s": 0.641626958,
+          "decode_tps": 48.314678199665046,
+          "wall_s": 9.4008,
           "finish_reason": "length",
           "token_ids": [
             270,
@@ -265,19 +265,14 @@
             65876,
             270,
             3072,
-            201,
-            361,
             3608,
             306,
             1785,
             16953,
             16,
             22178,
-            66,
-            15,
-            567,
-            36789,
-            44998,
+            16153,
+            361,
             2430,
             14,
             778,
@@ -285,13 +280,18 @@
             5516,
             1082,
             260,
-            201,
-            361,
             64443,
             8434,
-            1561
+            1561,
+            270,
+            201,
+            361,
+            25815,
+            936,
+            4006,
+            19367
           ],
-          "token_sha256": "0bb325967d98fc4df1cccf481a8a48932be8c5a290d10ed1890f51d17cfb0576"
+          "token_sha256": "16de368434593ca45191aba58634df59f427f8426979c67848851bffbcfc2630"
         },
         "quicksort-raw": {
           "name": "quicksort-raw",
@@ -299,10 +299,10 @@
           "completion_tokens": 64,
           "cached_tokens": 0,
           "drafts": false,
-          "ttft_s": 0.1208815,
-          "decode_s": 1.192606209,
-          "decode_tps": 52.82548382238047,
-          "wall_s": 1.3141,
+          "ttft_s": 0.11892,
+          "decode_s": 1.181107125,
+          "decode_tps": 53.33978490731736,
+          "wall_s": 1.3006,
           "finish_reason": "length",
           "token_ids": [
             361,
@@ -340,7 +340,7 @@
             74433,
             855,
             1527,
-            818,
+            8593,
             35005,
             2296,
             361,
@@ -357,7 +357,7 @@
             74433,
             855,
             1527,
-            11620,
+            1955,
             35005,
             2296,
             361,
@@ -370,7 +370,7 @@
             11,
             940
           ],
-          "token_sha256": "14a36924a615b32b82822a84062711967d1f9f2d5e8705336beb6e733e91d30e"
+          "token_sha256": "ae91dabed305ed10efad671c79e646ec4f0454a0d86f5215b3089d24e55d55aa"
         },
         "multiply-17-23": {
           "name": "multiply-17-23",
@@ -378,10 +378,10 @@
           "completion_tokens": 64,
           "cached_tokens": 0,
           "drafts": false,
-          "ttft_s": 0.119989,
-          "decode_s": 1.189258417,
-          "decode_tps": 52.974188872190254,
-          "wall_s": 1.3098,
+          "ttft_s": 0.101437541,
+          "decode_s": 1.180368833,
+          "decode_tps": 53.373147645622396,
+          "wall_s": 1.2823,
           "finish_reason": "length",
           "token_ids": [
             103633,

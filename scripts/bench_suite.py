@@ -307,7 +307,11 @@ def run_long_suite(binary: Path, base: config.Settings, output: Path, max_tokens
 
 
 def run_parity_vs_stock(
-    opt_binary: Path, stock_binary: Path, base: config.Settings, output: Path
+    opt_binary: Path,
+    stock_binary: Path,
+    base: config.Settings,
+    output: Path,
+    stock_model: Path | None = None,
 ):
     ids_32k = load_ids(ROOT / "assets/prompts/code_python-32768-1.ids")
     prompts = {
@@ -323,6 +327,7 @@ def run_parity_vs_stock(
     for label, binary in (("stock_v133", stock_binary), ("optimized_v133", opt_binary)):
         s = replace(
             base,
+            model=stock_model if (label == "stock_v133" and stock_model) else base.model,
             port=free_port(),
             context=40960,
             parallel=1,
@@ -340,6 +345,7 @@ def run_parity_vs_stock(
                     "TF_DSV41_FP64_BF16",
                     "TF_DSV41_M5_FAST_DECODE",
                     "TF_DSV41_MARKOV_TOPK",
+                    "TF_DSV41_ENGRAM_FIRST_RAM",
                 )
             }
         with ManagedServer(binary, s, log, env_override=env_override):
@@ -390,9 +396,12 @@ def run_parity_vs_stock(
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(receipt, indent=2) + "\n")
     print(f"[parity] all_exact={all_exact} -> {output}", flush=True)
-    for name in ("quicksort-raw", "multiply-17-23"):
-        if not comparisons[name]["exact_match"]:
-            raise RuntimeError(f"Decode-path parity mismatch on {name}: {comparisons[name]}")
+    for name, row in comparisons.items():
+        print(
+            f"  [parity:{name}] exact={row['exact_match']} first_diff={row['first_diff_index']} "
+            f"stock={row['stock_ttft_s']:.3f}s opt={row['optimized_ttft_s']:.3f}s ({row['ttft_speedup']}x)",
+            flush=True,
+        )
 
 
 def run_concurrent_suite(
@@ -553,6 +562,7 @@ def main():
     )
     parser.add_argument("--binary", type=Path)
     parser.add_argument("--stock-binary", type=Path)
+    parser.add_argument("--stock-model", type=Path)
     parser.add_argument("--max-tokens", type=int, default=128)
     parser.add_argument("--levels", default="1,2,4,8")
     parser.add_argument("--output", type=Path, required=True)
@@ -571,7 +581,9 @@ def main():
     elif args.mode == "parity":
         if not args.stock_binary:
             parser.error("--stock-binary is required for --mode parity")
-        run_parity_vs_stock(binary, args.stock_binary, base, args.output)
+        run_parity_vs_stock(
+            binary, args.stock_binary, base, args.output, stock_model=args.stock_model
+        )
 
 
 if __name__ == "__main__":

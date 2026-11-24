@@ -13,7 +13,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from mac import __main__ as cli
-from mac import config, engine, prepare
+from mac import config, engine, prepare, repack
 
 
 DUMMY_MANIFEST = {
@@ -85,6 +85,7 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(current["native_env"]["TF_DSV41_FP64_BF16"], "1")
         self.assertEqual(current["native_env"]["TF_DSV41_M5_FAST_DECODE"], "1")
         self.assertEqual(current["native_env"]["TF_DSV41_MARKOV_TOPK"], "64")
+        self.assertEqual(current["native_env"]["TF_DSV41_ENGRAM_FIRST_RAM"], "1")
 
     def test_prompt_cache_toggle(self):
         for local, flag, expected in (
@@ -185,6 +186,60 @@ class LauncherTests(unittest.TestCase):
             exe.write_bytes(b"tampered")
             with self.assertRaisesRegex(ValueError, "differs from build-receipt"):
                 engine.verify_build(s)
+
+    def test_repack_alignment_verification_and_check_shards(self):
+        import hashlib
+        import struct
+
+        root = self.local.parent
+        src = root / "orig"
+        dst = root / "repacked"
+        src.mkdir()
+        (src / "config.json").write_text('{"model_type":"deepseek_v41"}\n')
+        (src / "tokenizer.json").write_text("{}\n")
+
+        # Build a synthetic unaligned multi-consumer safetensors shard + raw Engram tensor
+        tensors = {
+            "embed_tokens.weight": (b"\x01\x02" * 16, "BF16", [4, 4]),
+            "layers.0.input_layernorm.weight": (b"\x03\x04\x05\x06" * 8, "F32", [8]),
+            "layers.1.engram.embed.weight": (b"\x99" * 64, "U8", [64]),
+            "mtp.0.norm.weight": (b"\x07\x08\x09\x0a" * 8, "F32", [8]),
+        }
+        hdr = {}
+        payload = bytearray()
+        for name, (raw, dtype, shape) in tensors.items():
+            start = len(payload)
+            payload.extend(raw)
+            hdr[name] = {"dtype": dtype, "shape": shape, "data_offsets": [start, len(payload)]}
+        hdr_bytes = json.dumps(hdr).encode("utf-8")
+        shard_path = src / "model-00001-of-00001.safetensors"
+        shard_path.write_bytes(struct.pack("<Q", len(hdr_bytes)) + hdr_bytes + bytes(payload))
+        index_bytes = json.dumps(
+            {"metadata": {}, "weight_map": {k: shard_path.name for k in tensors}}
+        ).encode("utf-8")
+        (src / "model.safetensors.index.json").write_bytes(index_bytes)
+        src_sha = hashlib.sha256(index_bytes).hexdigest()
+
+        manifest = repack.repack_checkpoint(
+            src, dst, workers=2, nocache=False, expected_source_index_sha256=src_sha
+        )
+        self.assertEqual(manifest["tensor_count"], 3)
+        self.assertEqual(manifest["shard_count"], 3)
+        self.assertEqual(manifest["skipped_engram_tensors"], ["layers.1.engram.embed.weight"])
+
+        repack.verify_repack(dst, check_sha256=True, expected_source_index_sha256=src_sha)
+        cmp = repack.verify_against_source(src, dst, sample_tensors=0)
+        self.assertEqual(cmp["checked_tensors"], 3)
+
+        with patch.object(prepare, "INDEX_SHA256", src_sha):
+            prepare.check_shards(replace(config.load(), model=dst))
+            # Tamper with manifest and ensure rejection
+            mpath = dst / repack.MANIFEST_NAME
+            bad = json.loads(mpath.read_text())
+            bad["source_index_sha256"] = "0" * 64
+            mpath.write_text(json.dumps(bad))
+            with self.assertRaisesRegex(ValueError, "pinned Flash-1017 index"):
+                prepare.check_shards(replace(config.load(), model=dst))
 
 
 if __name__ == "__main__":

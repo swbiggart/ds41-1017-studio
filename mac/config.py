@@ -32,6 +32,7 @@ class Settings:
     engram_cache_rows: int = 65536
     metal4: str = "1"
     markov_topk: int = 64
+    engram_first_ram: str = "1"
 
     @property
     def bin(self):
@@ -80,6 +81,7 @@ class Settings:
             "TF_DSV41_FP64_BF16": "1",
             "TF_DSV41_M5_FAST_DECODE": "1",
             "TF_DSV41_MARKOV_TOPK": str(self.markov_topk),
+            "TF_DSV41_ENGRAM_FIRST_RAM": self.engram_first_ram,
         }
         for key, value in environ.items():
             if key.startswith(("TF_", "TFDS41_")) and pinned.get(key) != value:

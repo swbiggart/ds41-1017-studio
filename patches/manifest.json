@@ -2,7 +2,7 @@
   "upstream_repo": "https://github.com/ashhart/TensorFold.git",
   "upstream_tag": "v1.3.3",
   "upstream_commit": "1e4a32cb5e80f2908e4642f9e7ffe71ae63792cc",
-  "source_tree": "e33568e35e2fa4617daec30798414a4f3c3f9be1",
+  "source_tree": "816b62182c352f14ddc17f50c9d24093c6bbfb96",
   "patches": [
     {
       "file": "01-m5-metal-dspark-stack.patch",
@@ -13,6 +13,11 @@
       "file": "02-m5-fast-decode-mode.patch",
       "sha256": "1092dea3bebb7b8e8a2f408558440b0848fcf4987c9e5fbd699a264a03746624",
       "description": "Add TF_DSV41_M5_FAST_DECODE=1 hybrid serve mode under TF_DSV41_FP64_BF16=1: combines M5 Ultra NAX FP8 + tensor-unit MXFP4 prompt prefill and the full PR 3-7 DSpark drafting stack with stock v1.3.3 FP32 hardware-MMA target decode/verify (fp8_rows, fp8_tile, experts, engram) for maximum end-to-end throughput."
+    },
+    {
+      "file": "03-m5-nax-prefill-repack-fast.patch",
+      "sha256": "ac10abe2b8b3858f79731051b8d5c47c8a5213fec2e74017d698dc60a9ff1913",
+      "description": "Apple M5 Ultra Metal 4.1 kernel research stack (0 modified upstream .metal files): lossless 128B/16KiB repacked checkpoint support (including zero-copy DSpark mtp-0..2 + repacked engram_manifest verification), Layer-1 Engram in pageable host RAM + SIMD E4M3 decode + cross-band row deduplication, layer-band encoder schedule (32 chunks) with 4-chunk cross-chunk routed expert batching and boot-audited staged Folded-E4M3 experts, single-pass NAX dense FP8 (keeping wo_a compact FP8), 16-head NAX prefill attention with fused grouped WO-A + fused grouped WO-B + in-place query RoPE, tensor-unit indexer decode, reversible coalesced BF16 vocab head, fused postnorm_expert + direct-slot MXFP4 verify experts, and plain_streams=5 optimal concurrent switch."
     }
   ]
 }

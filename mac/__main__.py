@@ -12,7 +12,7 @@ import subprocess
 import sys
 from urllib.error import HTTPError
 
-from . import engine, prepare, server
+from . import engine, prepare, repack, server
 from .config import ROOT, load, validate_serving
 
 SERVING = {"command", "settings", "validate", "serve", "up"}
@@ -51,6 +51,38 @@ def main():
         ("status", "report process identity and endpoint readiness"),
     ]:
         commands.add_parser(name, help=help_text)
+    rp = commands.add_parser(
+        "repack",
+        help="losslessly repack the checkpoint into 128B/16KiB-aligned per-consumer shards (omitting packed Engram)",
+    )
+    rp.add_argument(
+        "--from",
+        dest="source",
+        type=Path,
+        help="source official checkpoint directory (default: configured model_dir)",
+    )
+    rp.add_argument(
+        "--to",
+        dest="dest",
+        type=Path,
+        help="destination repacked directory (default: .local/checkpoint-repacked)",
+    )
+    rp.add_argument(
+        "--workers",
+        type=int,
+        default=repack.DEFAULT_WORKERS,
+        help="parallel shard writer threads (default: 10)",
+    )
+    rp.add_argument(
+        "--verify",
+        action="store_true",
+        help="spot-verify repacked tensor bytes against the source checkpoint",
+    )
+    rp.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite an existing destination directory",
+    )
     up = commands.add_parser(
         "up", help="start the server in the background and wait for readiness"
     )
@@ -104,6 +136,27 @@ def main():
         prepare.fetch(s)
     elif args.cmd == "prepare":
         prepare.prepare(s)
+    elif args.cmd == "repack":
+        src = args.source.expanduser().resolve() if args.source else s.model
+        dst = (
+            args.dest.expanduser().resolve()
+            if args.dest
+            else (ROOT / ".local/checkpoint-repacked").resolve()
+        )
+        manifest = repack.repack_checkpoint(
+            src,
+            dst,
+            workers=args.workers,
+            expected_source_index_sha256=prepare.INDEX_SHA256,
+            force=args.force,
+        )
+        repack.verify_repack(dst, expected_source_index_sha256=prepare.INDEX_SHA256)
+        if args.verify:
+            repack.verify_against_source(src, dst)
+        print(
+            f"Repacked {manifest['tensor_count']} tensors into {manifest['shard_count']} shards "
+            f"({manifest['total_file_bytes'] / (1 << 30):.2f} GiB) at {dst}"
+        )
     elif args.cmd == "settings":
         manifest = engine.load_manifest()
         print(
